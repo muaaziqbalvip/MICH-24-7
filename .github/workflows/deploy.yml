@@ -1,0 +1,43 @@
+name: Deploy MiTV Backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm install
+
+      - name: Deploy to Railway
+        run: |
+          echo "Deploy via Railway CLI or Render webhook"
+          # Option 1: Railway
+          # npm install -g @railway/cli
+          # railway up --service mitv-backend
+          # 
+          # Option 2: Render webhook
+          # curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+          echo "Configure RENDER_DEPLOY_HOOK or RAILWAY_TOKEN in GitHub Secrets"
+
+      - name: Health check
+        run: |
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACKEND_URL }}/health" || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Backend healthy"
+          else
+            echo "⚠️ Backend returned status: $STATUS"
+          fi

@@ -1,0 +1,47 @@
+name: MiTV Stream Keepalive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: |
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          if [ -z "$BACKEND" ]; then
+            echo "BACKEND_URL secret not set. Skipping."
+            exit 0
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND/health" || echo "000")
+          echo "Health check status: $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "⚠️ Backend down (status $STATUS) — attempting restart..."
+            # Render: hit deploy hook
+            if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+              curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+              echo "Render deploy hook triggered."
+            fi
+          else
+            # Ping stream endpoint to keep alive
+            curl -s "$BACKEND/stream/status" > /dev/null
+            echo "✅ Stream backend alive."
+          fi
+
+      - name: Check stream M3U8
+        run: |
+          BACKEND="${{ secrets.BACKEND_URL }}"
+          if [ -z "$BACKEND" ]; then exit 0; fi
+
+          M3U8=$(curl -s "$BACKEND/live/stream.m3u8" | head -c 50)
+          if echo "$M3U8" | grep -q "#EXTM3U"; then
+            echo "✅ M3U8 stream valid."
+          else
+            echo "⚠️ M3U8 not valid — triggering restart..."
+            curl -s -X POST "$BACKEND/stream/restart" || true
+          fi
