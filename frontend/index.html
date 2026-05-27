@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MiTV Live Stream Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+<div class="panel-bg"></div>
+
+<!-- HEADER -->
+<header class="topbar">
+  <div class="logo-area">
+    <span class="logo-icon">📡</span>
+    <span class="logo-text">MiTV <span class="accent">LIVE</span></span>
+    <span class="version-tag">Control Room</span>
+  </div>
+  <div class="stream-status" id="streamStatus">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">OFFLINE</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn-start" id="btnStart" onclick="startStream()">▶ START</button>
+    <button class="btn-stop" id="btnStop" onclick="stopStream()">■ STOP</button>
+    <button class="btn-restart" onclick="restartStream()">↺ RESTART</button>
+  </div>
+</header>
+
+<!-- TABS -->
+<nav class="tabs">
+  <button class="tab active" onclick="switchTab('sources',this)">📥 Sources</button>
+  <button class="tab" onclick="switchTab('overlays',this)">🎨 Overlays</button>
+  <button class="tab" onclick="switchTab('preview',this)">📺 Preview</button>
+  <button class="tab" onclick="switchTab('schedule',this)">🕐 Schedule</button>
+  <button class="tab" onclick="switchTab('logs',this)">📋 Logs</button>
+  <button class="tab" onclick="switchTab('output',this)">🔗 Output</button>
+</nav>
+
+<!-- ═══════════ SOURCES TAB ═══════════ -->
+<div id="tab-sources" class="tab-content active">
+  <div class="card">
+    <h2>📥 Stream Sources</h2>
+    <div class="form-row">
+      <input type="text" id="sourceUrl" placeholder="M3U8 / MP4 / MP3 / YouTube URL..." class="input-dark"/>
+      <input type="text" id="sourceLabel" placeholder="Label (e.g. Channel 1)" class="input-dark" style="max-width:200px"/>
+      <button class="btn-add" onclick="addSource()">+ ADD</button>
+    </div>
+    <div class="source-list" id="sourceList"></div>
+  </div>
+  <div class="card">
+    <h2>🔊 Audio Settings</h2>
+    <div class="form-row">
+      <label>Volume</label>
+      <input type="range" id="audioVolume" min="0" max="2" step="0.1" value="1" oninput="updateAudio()" class="slider"/>
+      <span id="volumeVal">1.0</span>
+    </div>
+    <div class="form-row">
+      <label>Mute Original Audio</label>
+      <input type="checkbox" id="muteOriginal" onchange="updateAudio()" class="toggle"/>
+    </div>
+    <div class="form-row">
+      <label>Background Music URL (MP3)</label>
+      <input type="text" id="bgMusic" placeholder="https://..." class="input-dark"/>
+      <button class="btn-sm" onclick="setBgMusic()">Set</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OVERLAYS TAB ═══════════ -->
+<div id="tab-overlays" class="tab-content">
+  <div class="overlay-grid">
+
+    <!-- Logo Overlay -->
+    <div class="card">
+      <h2>🖼️ Logo Overlay</h2>
+      <div class="form-row">
+        <label>Upload Logo (ImgBB)</label>
+        <input type="file" id="logoFile" accept="image/*" onchange="uploadLogo(this)"/>
+      </div>
+      <div class="form-row">
+        <label>Or paste URL</label>
+        <input type="text" id="logoUrl" placeholder="https://i.ibb.co/..." class="input-dark"/>
+        <button class="btn-sm" onclick="setLogoUrl()">Set</button>
+      </div>
+      <img id="logoPreview" src="" alt="" style="max-height:60px;margin:8px 0;display:none;border-radius:6px;"/>
+      <div class="form-row">
+        <label>Position X (%)</label>
+        <input type="range" id="logoX" min="0" max="90" value="2" oninput="updateOverlay()" class="slider"/>
+        <span id="logoXVal">2</span>
+      </div>
+      <div class="form-row">
+        <label>Position Y (%)</label>
+        <input type="range" id="logoY" min="0" max="90" value="2" oninput="updateOverlay()" class="slider"/>
+        <span id="logoYVal">2</span>
+      </div>
+      <div class="form-row">
+        <label>Scale (%)</label>
+        <input type="range" id="logoScale" min="5" max="50" value="15" oninput="updateOverlay()" class="slider"/>
+        <span id="logoScaleVal">15</span>
+      </div>
+      <div class="form-row">
+        <label>Animation</label>
+        <select id="logoAnim" onchange="updateOverlay()" class="select-dark">
+          <option value="none">None</option>
+          <option value="fadein">Fade In</option>
+          <option value="bounce">Bounce</option>
+          <option value="slide">Slide In</option>
+          <option value="pulse">Pulse</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Border Color</label>
+        <input type="color" id="logoBorderColor" value="#ff0000" onchange="updateOverlay()" class="color-picker"/>
+        <label>Border Width</label>
+        <input type="number" id="logoBorderWidth" min="0" max="10" value="0" onchange="updateOverlay()" class="input-sm"/>
+      </div>
+      <div class="form-row">
+        <label>Shadow</label>
+        <input type="checkbox" id="logoShadow" onchange="updateOverlay()" class="toggle"/>
+      </div>
+    </div>
+
+    <!-- Text Overlays -->
+    <div class="card">
+      <h2>📝 Text Overlays</h2>
+
+      <!-- Channel Name -->
+      <div class="overlay-section">
+        <h3>Channel Name / Watermark</h3>
+        <div class="form-row">
+          <input type="text" id="channelText" placeholder="MiTV Network" class="input-dark"/>
+          <button class="btn-sm" onclick="updateOverlay()">Apply</button>
+        </div>
+        <div class="form-row">
+          <label>Font</label>
+          <select id="channelFont" onchange="updateOverlay()" class="select-dark">
+            <option value="Orbitron">Orbitron</option>
+            <option value="Arial">Arial</option>
+            <option value="Impact">Impact</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Rajdhani">Rajdhani</option>
+          </select>
+          <label>Size</label>
+          <input type="number" id="channelFontSize" value="28" min="10" max="100" onchange="updateOverlay()" class="input-sm"/>
+        </div>
+        <div class="form-row">
+          <label>Color</label>
+          <input type="color" id="channelColor" value="#ffffff" onchange="updateOverlay()" class="color-picker"/>
+          <label>Pos X%</label>
+          <input type="number" id="channelX" value="50" min="0" max="90" onchange="updateOverlay()" class="input-sm"/>
+          <label>Y%</label>
+          <input type="number" id="channelY" value="90" min="0" max="90" onchange="updateOverlay()" class="input-sm"/>
+        </div>
+      </div>
+
+      <!-- Breaking News Ticker -->
+      <div class="overlay-section">
+        <h3>Breaking News Ticker</h3>
+        <div class="form-row">
+          <input type="text" id="tickerText" placeholder="BREAKING: News ticker text here..." class="input-dark"/>
+          <button class="btn-sm" onclick="updateOverlay()">Apply</button>
+        </div>
+        <div class="form-row">
+          <label>BG Color</label>
+          <input type="color" id="tickerBg" value="#cc0000" onchange="updateOverlay()" class="color-picker"/>
+          <label>Text Color</label>
+          <input type="color" id="tickerColor" value="#ffffff" onchange="updateOverlay()" class="color-picker"/>
+        </div>
+        <div class="form-row">
+          <label>Show Ticker</label>
+          <input type="checkbox" id="showTicker" checked onchange="updateOverlay()" class="toggle"/>
+          <label>Speed</label>
+          <select id="tickerSpeed" onchange="updateOverlay()" class="select-dark">
+            <option value="slow">Slow</option>
+            <option value="normal" selected>Normal</option>
+            <option value="fast">Fast</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Time/Date -->
+      <div class="overlay-section">
+        <h3>Time & Date Display</h3>
+        <div class="form-row">
+          <label>Show Clock</label>
+          <input type="checkbox" id="showClock" checked onchange="updateOverlay()" class="toggle"/>
+          <label>Show Date</label>
+          <input type="checkbox" id="showDate" checked onchange="updateOverlay()" class="toggle"/>
+        </div>
+        <div class="form-row">
+          <label>Format</label>
+          <select id="clockFormat" onchange="updateOverlay()" class="select-dark">
+            <option value="12h">12 Hour</option>
+            <option value="24h">24 Hour</option>
+          </select>
+          <label>Color</label>
+          <input type="color" id="clockColor" value="#ffff00" onchange="updateOverlay()" class="color-picker"/>
+        </div>
+        <div class="form-row">
+          <label>Clock Anim</label>
+          <select id="clockAnim" onchange="updateOverlay()" class="select-dark">
+            <option value="none">None</option>
+            <option value="slide">Slide</option>
+            <option value="fade">Fade</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Color Patti (color strip) -->
+      <div class="overlay-section">
+        <h3>Color Strip (Patti)</h3>
+        <div class="form-row">
+          <label>Show Patti</label>
+          <input type="checkbox" id="showPatti" onchange="updateOverlay()" class="toggle"/>
+          <label>Color</label>
+          <input type="color" id="pattiColor" value="#003366" onchange="updateOverlay()" class="color-picker"/>
+        </div>
+        <div class="form-row">
+          <label>Position</label>
+          <select id="pattiPosition" onchange="updateOverlay()" class="select-dark">
+            <option value="top">Top</option>
+            <option value="bottom" selected>Bottom</option>
+          </select>
+          <label>Height%</label>
+          <input type="number" id="pattiHeight" value="8" min="3" max="20" onchange="updateOverlay()" class="input-sm"/>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PREVIEW TAB ═══════════ -->
+<div id="tab-preview" class="tab-content">
+  <div class="card preview-card">
+    <h2>📺 Live Preview</h2>
+    <div class="preview-wrapper">
+      <div class="preview-screen" id="previewScreen">
+        <!-- Canvas overlay simulation -->
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <canvas id="overlayCanvas"></canvas>
+
+        <!-- Live overlay elements (for preview simulation) -->
+        <div class="ov-logo" id="ovLogo"></div>
+        <div class="ov-channel" id="ovChannel"></div>
+        <div class="ov-ticker" id="ovTicker"><span class="ticker-label">BREAKING</span><span class="ticker-scroll" id="tickerScroll"></span></div>
+        <div class="ov-clock" id="ovClock"></div>
+        <div class="ov-patti" id="ovPatti"></div>
+      </div>
+    </div>
+    <div class="preview-controls">
+      <input type="text" id="previewM3u8" placeholder="Paste M3U8 URL to preview..." class="input-dark"/>
+      <button class="btn-add" onclick="loadPreview()">▶ Load</button>
+      <button class="btn-sm" onclick="loadFromFirebase()">📡 Load Live</button>
+    </div>
+    <div class="preview-info">
+      <span id="prevRes">-</span> | <span id="prevBuf">-</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SCHEDULE TAB ═══════════ -->
+<div id="tab-schedule" class="tab-content">
+  <div class="card">
+    <h2>🕐 Stream Scheduler</h2>
+    <div class="form-row">
+      <input type="time" id="schedTime" class="input-dark" style="max-width:140px"/>
+      <input type="text" id="schedUrl" placeholder="URL or source label..." class="input-dark"/>
+      <input type="text" id="schedLabel" placeholder="Label..." class="input-dark" style="max-width:160px"/>
+      <button class="btn-add" onclick="addSchedule()">+ ADD</button>
+    </div>
+    <div class="sched-list" id="schedList"></div>
+  </div>
+</div>
+
+<!-- ═══════════ LOGS TAB ═══════════ -->
+<div id="tab-logs" class="tab-content">
+  <div class="card">
+    <h2>📋 System Logs</h2>
+    <div class="log-controls">
+      <button class="btn-sm" onclick="clearLogs()">Clear</button>
+      <button class="btn-sm" onclick="loadLogs()">Refresh</button>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+</div>
+
+<!-- ═══════════ OUTPUT TAB ═══════════ -->
+<div id="tab-output" class="tab-content">
+  <div class="card">
+    <h2>🔗 Stream Output</h2>
+    <div class="output-block">
+      <label>M3U8 Live URL</label>
+      <div class="copy-row">
+        <input type="text" id="outM3u8" class="input-dark" readonly/>
+        <button class="btn-sm" onclick="copyText('outM3u8')">📋 Copy</button>
+      </div>
+    </div>
+    <div class="output-block">
+      <label>Embed Code</label>
+      <textarea id="outEmbed" class="input-dark" rows="3" readonly></textarea>
+      <button class="btn-sm" onclick="copyText('outEmbed')">📋 Copy</button>
+    </div>
+    <div class="output-block">
+      <label>Backend Server URL</label>
+      <div class="copy-row">
+        <input type="text" id="backendUrl" class="input-dark" placeholder="https://your-app.railway.app"/>
+        <button class="btn-sm" onclick="saveBackendUrl()">💾 Save</button>
+      </div>
+      <small style="color:#aaa">Enter your Railway/Render backend URL here</small>
+    </div>
+    <div class="qr-area" id="qrArea"></div>
+  </div>
+</div>
+
+<script src="dashboard.js"></script>
+</body>
+</html>
